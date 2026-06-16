@@ -1,223 +1,203 @@
-from flask import Flask, request, render_template_string
+import os
 import pickle
 import numpy as np
-import pandas as pd
+from flask import Flask, request, render_template_string
 
 app = Flask(__name__)
 
-# Load the decision tree model safely
-try:
-    with open('decision_tree_2.pkl', 'rb') as f:
-        model = pickle.load(f)
-    print("Model loaded successfully.")
-except Exception as e:
-    print(f"Error loading model: {e}")
-    model = None
+# Load the Decision Tree Regressor model
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "decision_pkl.pkl")
+with open(MODEL_PATH, "rb") as f:
+    model = pickle.load(f)
 
-# Single-file HTML template embedded directly into Flask to avoid separate HTML files
+# Attractive Dashboard Single-Page UI
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vehicle Price Predictor</title>
+    <title>AI Vehicle Valuation Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f3f4f6;
-            margin: 0;
-            padding: 30px 10px;
-            display: flex;
-            justify-content: center;
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            color: #f8fafc;
+            min-height: 100vh;
         }
-        .container {
-            background: #ffffff;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-            max-width: 550px;
-            width: 100%;
-        }
-        h2 { text-align: center; color: #1f2937; margin-bottom: 25px; font-weight: 600; }
-        .form-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-        }
-        .form-group { margin-bottom: 15px; }
-        .full-width { grid-column: span 2; }
-        label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: 500; color: #4b5563; }
-        input, select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
-            box-sizing: border-box;
-            font-size: 14px;
-            background-color: #f9fafb;
-            transition: border-color 0.2s;
-        }
-        input:focus, select:focus {
-            outline: none;
-            border-color: #3b82f6;
-            background-color: #fff;
-        }
-        button {
-            width: 100%;
-            padding: 12px;
-            background-color: #2563eb;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            margin-top: 15px;
-            transition: background-color 0.2s;
-        }
-        button:hover { background-color: #1d4ed8; }
-        .result-container { margin-top: 25px; }
-        .result-box {
-            padding: 15px;
-            background-color: #ecfdf5;
-            border: 1px solid #10b981;
-            border-radius: 6px;
-            text-align: center;
-            font-size: 18px;
+        .navbar-brand {
             font-weight: 700;
-            color: #065f46;
+            letter-spacing: -0.5px;
+            color: #38bdf8 !important;
         }
-        .error-box {
-            padding: 15px;
-            background-color: #fef2f2;
-            border: 1px solid #ef4444;
-            border-radius: 6px;
-            text-align: center;
-            font-size: 14px;
-            color: #991b1b;
+        .main-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1.25rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
+        }
+        .form-label {
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: #94a3b8;
+        }
+        .form-control, .form-select {
+            background-color: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #ffffff;
+            border-radius: 0.5rem;
+            padding: 0.625rem 1rem;
+            transition: all 0.2s ease-in-out;
+        }
+        .form-control:focus, .form-select:focus {
+            background-color: #0f172a;
+            border-color: #38bdf8;
+            color: #ffffff;
+            box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+        }
+        .btn-predict {
+            background: linear-gradient(135deg, #38bdf8 0%, #2563eb 100%);
+            border: none;
+            color: white;
+            font-weight: 600;
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            transition: transform 0.2s, opacity 0.2s;
+        }
+        .btn-predict:hover {
+            transform: translateY(-1px);
+            opacity: 0.95;
+        }
+        .result-box {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.15) 100%);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            border-radius: 0.75rem;
         }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>Vehicle Price Predictor</h2>
-    <form method="POST" action="/predict">
-        <div class="form-grid">
-            <div class="form-group">
-                <label>Make (Brand):</label>
-                <input type="text" name="Make" placeholder="e.g., Toyota" required value="{{ inputs.Make if inputs else '' }}">
-            </div>
-            <div class="form-group">
-                <label>Model:</label>
-                <input type="text" name="Model" placeholder="e.g., Corolla" required value="{{ inputs.Model if inputs else '' }}">
-            </div>
-            <div class="form-group">
-                <label>Year:</label>
-                <input type="number" name="Year" placeholder="e.g., 2018" min="1900" max="2030" required value="{{ inputs.Year if inputs else '' }}">
-            </div>
-            <div class="form-group">
-                <label>Engine Size (L):</label>
-                <input type="number" step="0.1" name="Engine Size" placeholder="e.g., 2.0" required value="{{ inputs.get('Engine Size') if inputs else '' }}">
-            </div>
-            <div class="form-group full-width">
-                <label>Mileage:</label>
-                <input type="number" name="Mileage" placeholder="e.g., 45000" min="0" required value="{{ inputs.Mileage if inputs else '' }}">
-            </div>
-            <div class="form-group">
-                <label>Fuel Type:</label>
-                <select name="Fuel Type" required>
-                    <option value="Petrol" {% if inputs and inputs['Fuel Type'] == 'Petrol' %}selected{% endif %}>Petrol</option>
-                    <option value="Diesel" {% if inputs and inputs['Fuel Type'] == 'Diesel' %}selected{% endif %}>Diesel</option>
-                    <option value="Electric" {% if inputs and inputs['Fuel Type'] == 'Electric' %}selected{% endif %}>Electric</option>
-                    <option value="Hybrid" {% if inputs and inputs['Fuel Type'] == 'Hybrid' %}selected{% endif %}>Hybrid</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Transmission:</label>
-                <select name="Transmission" required>
-                    <option value="Manual" {% if inputs and inputs.Transmission == 'Manual' %}selected{% endif %}>Manual</option>
-                    <option value="Automatic" {% if inputs and inputs.Transmission == 'Automatic' %}selected{% endif %}>Automatic</option>
-                </select>
+    <nav class="navbar navbar-expand-lg navbar-dark pt-4">
+        <div class="container">
+            <a class="navbar-brand" href="#"><i class="fa-solid fa-car-rocket me-2"></i>VALUAI.</a>
+        </div>
+    </nav>
+
+    <div class="container my-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="main-card p-4 p-md-5">
+                    <h2 class="text-center fw-bold mb-2">Predict Valuation</h2>
+                    <p class="text-center text-muted mb-4">Input details below to dynamically query your decision tree estimator model.</p>
+                    
+                    {% if prediction_text %}
+                    <div class="result-box p-4 text-center mb-4">
+                        <span class="d-block text-uppercase small text-success fw-bold tracking-wider mb-1">Estimated Value</span>
+                        <h1 class="fw-extrabold text-success m-0">{{ prediction_text }}</h1>
+                    </div>
+                    {% endif %}
+
+                    <form action="/predict" method="POST">
+                        <div class="row g-4">
+                            <div class="col-md-6">
+                                <label class="form-label"><i class="fa-solid fa-calendar me-1"></i> Production Year</label>
+                                <input type="number" class="form-control" name="year" placeholder="e.g. 2022" required min="1900" max="2027" value="{{ inputs.year if inputs else '' }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label"><i class="fa-solid fa-gauge me-1"></i> Engine Size (Liters)</label>
+                                <input type="number" step="0.1" class="form-control" name="engine_size" placeholder="e.g. 2.0" required value="{{ inputs.engine_size if inputs else '' }}">
+                            </div>
+                            <div class="col-md-12">
+                                <label class="form-label"><i class="fa-solid fa-road me-1"></i> Current Mileage</label>
+                                <input type="number" class="form-control" name="mileage" placeholder="e.g. 35000" required min="0" value="{{ inputs.mileage if inputs else '' }}">
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label"><i class="fa-solid fa-industry me-1"></i> Manufacturer / Make</label>
+                                <select class="form-select" name="make" required>
+                                    <option value="0" {% if inputs and inputs.make == '0' %}selected{% endif %}>Toyota</option>
+                                    <option value="1" {% if inputs and inputs.make == '1' %}selected{% endif %}>Honda</option>
+                                    <option value="2" {% if inputs and inputs.make == '2' %}selected{% endif %}>Ford</option>
+                                    <option value="3" {% if inputs and inputs.make == '3' %}selected{% endif %}>BMW</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label"><i class="fa-solid fa-car me-1"></i> Body Model Category</label>
+                                <select class="form-select" name="model" required>
+                                    <option value="0" {% if inputs and inputs.model == '0' %}selected{% endif %}>Sedan</option>
+                                    <option value="1" {% if inputs and inputs.model == '1' %}selected{% endif %}>SUV</option>
+                                    <option value="2" {% if inputs and inputs.model == '2' %}selected{% endif %}>Hatchback</option>
+                                    <option value="3" {% if inputs and inputs.model == '3' %}selected{% endif %}>Coupe</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label"><i class="fa-solid fa-gas-pump me-1"></i> Fuel Type</label>
+                                <select class="form-select" name="fuel_type" required>
+                                    <option value="0" {% if inputs and inputs.fuel_type == '0' %}selected{% endif %}>Petrol</option>
+                                    <option value="1" {% if inputs and inputs.fuel_type == '1' %}selected{% endif %}>Diesel</option>
+                                    <option value="2" {% if inputs and inputs.fuel_type == '2' %}selected{% endif %}>Electric</option>
+                                    <option value="3" {% if inputs and inputs.fuel_type == '3' %}selected{% endif %}>Hybrid</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label"><i class="fa-solid fa-gears me-1"></i> Transmission</label>
+                                <select class="form-select" name="transmission" required>
+                                    <option value="0" {% if inputs and inputs.transmission == '0' %}selected{% endif %}>Manual</option>
+                                    <option value="1" {% if inputs and inputs.transmission == '1' %}selected{% endif %}>Automatic</option>
+                                    <option value="2" {% if inputs and inputs.transmission == '2' %}selected{% endif %}>Semi-Auto</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-12 pt-2">
+                                <button type="submit" class="btn btn-predict w-100 text-uppercase tracking-wide">
+                                    <i class="fa-solid fa-wand-magic-sparkles me-2"></i>Calculate Value
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
-        <button type="submit">Predict Price</button>
-    </form>
-
-    <div class="result-container">
-        {% if prediction_text %}
-            <div class="result-box">{{ prediction_text }}</div>
-        {% elif error_text %}
-            <div class="error-box">{{ error_text }}</div>
-        {% endif %}
     </div>
-</div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
 """
 
-@app.route('/', methods=['GET'])
+@app.route("/")
 def home():
-    return render_template_string(HTML_TEMPLATE, inputs=None)
+    return render_template_string(HTML_TEMPLATE)
 
-@app.route('/predict', methods=['POST'])
+@app.route("/predict", methods=["POST"])
 def predict():
-    if model is None:
-        return render_template_string(HTML_TEMPLATE, error_text="Model file 'decision_tree_2.pkl' could not be found or loaded on the server.", inputs=request.form)
+    form_data = request.form
     
-    try:
-        # Collect inputs from form submission
-        form_data = {
-            'Make': request.form['Make'],
-            'Model': request.form['Model'],
-            'Year': int(request.form['Year']),
-            'Engine Size': float(request.form['Engine Size']),
-            'Mileage': int(request.form['Mileage']),
-            'Fuel Type': request.form['Fuel Type'],
-            'Transmission': request.form['Transmission']
-        }
-        
-        # Build DataFrame with proper feature names matching model metadata
-        df = pd.DataFrame([{
-            'Make': form_data['Make'],
-            'Model': form_data['Model'],
-            'Year': form_data['Year'],
-            'Engine Size': form_data['Engine Size'],
-            'Mileage': form_data['Mileage'],
-            'Fuel Type': form_data['Fuel Type'],
-            'Transmission': form_data['Transmission']
-        }])
-        
-        try:
-            # First attempt: Try standard inference (Works if model uses raw text or is an end-to-end Pipeline)
-            prediction = model.predict(df)[0]
-        except ValueError as val_err:
-            # Fallback routine: Handles cases where the model expects pre-encoded numeric types instead of string objects
-            print("Direct string conversion failed, executing fallback numerical categorization...")
-            
-            # Simple conversion mapping (hashes strings to repeatable numeric codes for the model tree structures)
-            df_fallback = df.copy()
-            df_fallback['Make'] = df_fallback['Make'].apply(lambda x: abs(hash(x)) % 100)
-            df_fallback['Model'] = df_fallback['Model'].apply(lambda x: abs(hash(x)) % 500)
-            
-            fuel_map = {'Petrol': 0, 'Diesel': 1, 'Electric': 2, 'Hybrid': 3}
-            trans_map = {'Manual': 0, 'Automatic': 1}
-            
-            df_fallback['Fuel Type'] = df_fallback['Fuel Type'].map(fuel_map).fillna(0)
-            df_fallback['Transmission'] = df_fallback['Transmission'].map(trans_map).fillna(0)
-            
-            prediction = model.predict(df_fallback)[0]
-        
-        # Format prediction display string
-        output = round(float(prediction), 2)
-        prediction_text = f"Estimated Vehicle Price: ${output:,}"
-        
-        return render_template_string(HTML_TEMPLATE, prediction_text=prediction_text, inputs=form_data)
-        
-    except Exception as e:
-        return render_template_string(HTML_TEMPLATE, error_text=f"Prediction error occurred: {str(e)}", inputs=request.form)
+    # Structure inputs sequentially to match your model's expected features
+    features = [
+        float(form_data['make']),
+        float(form_data['model']),
+        float(form_data['year']),
+        float(form_data['engine_size']),
+        float(form_data['mileage']),
+        float(form_data['fuel_type']),
+        float(form_data['transmission'])
+    ]
+    
+    final_features = [np.array(features)]
+    prediction = model.predict(final_features)
+    output = round(prediction[0], 2)
+    
+    prediction_text = f"${output:,}"
+
+    return render_template_string(HTML_TEMPLATE, prediction_text=prediction_text, inputs=form_data)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
